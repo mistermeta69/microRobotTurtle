@@ -1,0 +1,465 @@
+/*August 16,1994 - Version 1.0, T. Barake*/
+/*Robot language for learning to program, small interpreter*/
+
+/*       Language description: (also see the README.DOC documentation file)
+
+         program:
+                    function_def[s]
+                    START_PROGRAM
+                    statement[s]
+                    END_PROGRAM
+
+         function_def:
+                    DEFINE(function_name)
+                      BEGIN statement [return] END
+
+         return:    RETURN_TRUE or RETURN_FALSE
+
+         statement:
+                    LOAD(fname)
+                    WHILE cond statement
+				FOR(num) statement  1<=num<=256
+                    IF cond statement
+                    IF cond statement ELSE statement
+                    BEGIN statement END
+				{ statement }
+                    STOP
+                    PEN_UP
+                    PEN_DOWN
+                    R
+                    L
+                    F
+                    WAIT
+                    TAKE
+                    SPEED(n) 1<=n<=10
+                    MAXSTEPS(n) 1<=n<=MAXINSTR
+                    CALL(n)  n:function name
+                    cond TRUE(n)  check return value
+
+         cond:
+                    modifier BLOCKED
+				modifier PELLET
+                    modifier BREAD
+
+         modifier:
+				NOT
+
+Implemented as an include file with function calls!
+use #include "ROBOT.H" at top of C file, then compile
+
+The maze format is an ASCII file, one line per maze row up to size
+allowed by MAZESIZE,
+followed by x,y coords of robot one coord per line   0<= x,y < MAZESIZE
+followed by ix,iy increments showing robot bearing +1,-1,0 allowed
+
+Example: */
+
+/*
+
+OOOOOOOOOOOOOOOO
+O              O
+O              O
+O              O
+O              O
+O     OOO O    O
+O     O   O    O
+P     O   O    P
+O     O   O    O
+O     O   OO   O
+OOOOOOO        O
+O              O
+O     OOOOOOO  O
+O              O
+O              O
+OOOOOOOOPOOOOOOO
+ 1
+ 1
+ 1
+ 0
+
+*/
+
+#ifndef ROBOT
+#define ROBOT 1
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <graphics.h>
+
+#pragma option -w-       /*no warnings*/
+
+#define DELAY 64*speed   /*time delay between movements*/
+#define MAZESIZE 16 /*maze  matrix size */
+#define MAXINSTR 10000             /*limit on executuin steps*/
+#define MUL (unsigned)(480/MAZESIZE)
+#define GRAPHPATH "c:/lang/turbo/tc/bgi"  /*path for graphics files*/
+#define IS 29 /*image size*/
+#define BP 0x80
+
+#define MAXSTEPS(n) {if (n>=1 && n<=MAXINSTR) maxsteps=n;}
+#define SPEED(n) {if (n>=1 && n<=10) speed=11-n;}
+#define LOAD(c)  loadenv(c);
+#define WHILE while(
+#define FOR(n) {if (n<0 || n>256) i=0; else i=n;} for(;i>0;i--)
+#define IF if(
+#define ELSE else
+#define BLOCKED blocked())
+#define BEGIN {
+#define END }
+#define END_DEFINE }
+#define NOT !
+#define PELLET found())
+#define BREAD bread())
+#define TAKE take();
+#define STOP {for(i=0;i<64;i++){delay(30);right();} delay(DELAY);restorecrtmode();exit(0);}
+#define R {right();incsteps();delay(DELAY);}
+#define L {left();incsteps();delay(DELAY);}
+#define F forward();
+#define CLOSE_HATCH {trace=(char)(0x00);}
+#define OPEN_HATCH {drop();trace=((char)BP);}
+#define WAIT waitmsg();
+#define START_PROGRAM void main()  {
+#define END_PROGRAM STOP}
+#define DEFINE(n) n() {int i;   /*function definitions*/
+#define CALL(n) n();          /*function calls*/
+#define RETURN_TRUE return(1);
+#define RETURN_FALSE return(0);
+#define TRUE(n) (1==n()))
+
+void loadenv(char *fname); /*loads and displays maze*/
+int blocked();       /*checks if robot's forward path is blocked*/
+int found();         /*checks if robot is sitting on a power pellet*/
+void take();         /*take power pellet and incr score*/
+void right();         /*turns right*/
+void left();          /*turns left*/
+void forward();       /*advances one spot if possible*/
+void incsteps();
+void drop();
+
+/*robot variables*/
+char maze[MAZESIZE][MAZESIZE+1];  /*our universe, bounded by a frame*/
+     /* ' ' is blank, O is obstacle, P is power pellet, BP is trail,
+         robot is stored as a coodinates, CR after each line*/
+unsigned lin,col,olin,ocol;  /*robot position*/
+int xdir,ydir;     /*robot direction*/
+unsigned score,steps;        /*pellets picked up, steps taken*/
+char trace;       /*pen up or down , msb set*/
+unsigned i;        /*index for dor loop*/
+void far *blankline,*blank,*wall,*ru,*rd,*rl,*rr,*crumb,*pellet; /*image blocks*/
+unsigned speed;
+unsigned maxsteps;
+
+/*robot code will use graphics screen and refresh graphics as program
+  executes, delays are built in*/
+
+void robot_body()
+     {
+     clearviewport();
+     setcolor(GREEN);
+     circle(15,15,10);
+     circle(15,15,3);
+     setfillstyle(CLOSE_DOT_FILL,GREEN);
+     floodfill(15,15,GREEN);
+     }
+
+void make_icons()
+     {
+     /*create icons*/
+
+     /*Wall block*/
+     setcolor(WHITE);
+     rectangle(0,0,IS,IS);
+     setfillstyle(LTSLASH_FILL,WHITE);
+     floodfill(15,15,WHITE);
+     wall=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,wall);
+
+     /*Bread Crumb*/
+
+     clearviewport();
+     setcolor(YELLOW);
+     rectangle(13,13,17,17);
+     setfillstyle(SOLID_FILL,YELLOW);
+     floodfill(15,15,YELLOW);
+	crumb=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,crumb);
+
+     /*Power pellet*/
+     clearviewport();
+     setcolor(RED);
+     circle(15,15,9);
+     setfillstyle(SOLID_FILL,MAGENTA);
+     floodfill(15,15,RED);
+     pellet=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,pellet);
+
+
+     /*robot icons, up down right and left*/
+     robot_body();
+     line(0,15,15,0);
+     line(15,0,29,15);
+     line(0,15,4,15);
+     line(25,15,29,15);
+     setfillstyle(SOLID_FILL,CYAN);
+	floodfill(15,4,GREEN);
+     rl=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,rl);
+
+
+     robot_body();
+     line(0,15,15,29);
+     line(15,29,29,15);
+     line(0,15,4,15);
+     line(25,15,29,15);
+     setfillstyle(SOLID_FILL,CYAN);
+     floodfill(15,28,GREEN);
+     rr=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,rr);
+
+     robot_body();
+     line(15,0,0,15);
+     line(0,15,15,29);
+     line(15,0,15,4);
+     line(15,29,15,24);
+	setfillstyle(SOLID_FILL,CYAN);
+     floodfill(1,15,GREEN);
+     ru=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,ru);
+
+     robot_body();
+     line(15,0,29,15);
+     line(29,15,15,29);
+     line(15,0,15,4);
+     line(15,29,15,24);
+     setfillstyle(SOLID_FILL,CYAN);
+     floodfill(28,15,GREEN);
+     rd=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,rd);
+     clearviewport();
+
+     blank=(void far *) malloc((size_t)imagesize(0,0,IS,IS));
+     getimage(0,0,IS,IS,blank);
+     blankline=(void far *) malloc((size_t)imagesize(0,0,100,15));
+     getimage(0,0,100,15,blankline);
+	}
+
+void displaymaze()
+     {
+     int lin,col;
+     clearviewport();
+     for (lin=0;lin<MAZESIZE;lin++)
+         for (col=0;col<MAZESIZE;col++)
+             {
+             if (maze[lin][col]=='O')
+                putimage(col*MUL,lin*MUL,wall,COPY_PUT);
+             else
+             if ((~BP & maze[lin][col])=='P')
+                putimage(col*MUL,lin*MUL,pellet,COPY_PUT);
+             if (maze[lin][col] & BP)
+                putimage(col*MUL,lin*MUL,crumb,OR_PUT);
+             }
+     }
+
+void eraserobot()
+	{
+     if (maze[olin][ocol]=='O')
+         putimage(ocol*MUL,olin*MUL,wall,COPY_PUT);
+     else
+     if ((~BP & maze[olin][ocol])=='P')
+         putimage(ocol*MUL,olin*MUL,pellet,COPY_PUT);
+     else
+         putimage(ocol*MUL,olin*MUL,blank,COPY_PUT);
+
+     if (maze[olin][ocol] & BP)
+         putimage(ocol*MUL,olin*MUL,crumb,XOR_PUT);
+     }
+
+void drawrobot()
+     {
+     void far *ptr;
+
+     if (xdir>0) ptr=rr;
+          else
+     if (xdir<0) ptr=rl;
+		else
+     if (ydir>0) ptr=rd;
+          else
+     if (ydir<0) ptr=ru;
+
+     if (lin!=olin || col!=ocol)        /*we have moved*/
+          {
+          olin=lin;
+          ocol=col;
+          }
+
+     putimage(col*MUL,lin*MUL,ptr,COPY_PUT);
+
+     }
+
+
+void loadenv(char *fname)
+     {
+     int graph_driver,graph_mode,fp;
+     char str[3];
+
+     clrscr();
+     if (-1==(fp=open(fname,O_TEXT)))
+        {
+         printf("\nAn error occurred while opening maze file\n");
+         exit(0);
+         }
+
+     if (-1==read(fp,maze,MAZESIZE*(MAZESIZE+2)))
+        {
+         printf("\nAn error occurred while opening maze file\n");
+         exit(0);
+         }
+
+     read(fp,str,3);                /*character format*/
+     lin = atoi(str);
+     read(fp,str,3);                /*character format*/
+     col=atoi(str);
+
+     read(fp,str,3);                /*character format*/
+	xdir = atoi(str);
+     read(fp,str,3);                /*character format*/
+     ydir=atoi(str);
+
+     graph_driver = (int) DETECT;
+     initgraph(&graph_driver,&graph_mode,GRAPHPATH);
+
+
+     score=0;
+     CLOSE_HATCH;
+     make_icons();
+     /*display the maze here*/
+
+     displaymaze();
+
+     olin=lin;ocol=col;
+
+     drawrobot();
+     speed=5;
+     steps=0;
+	maxsteps=MAXINSTR;
+     delay(DELAY);
+     }
+
+
+int blocked()  /*obstacle in the way?*/
+    {
+    return (maze[lin+xdir][col+ydir]  == 'O');
+    }
+
+int found()    /*am I sitting on a power pellet?*/
+    {
+    return((maze[lin+xdir][col+ydir]&(~BP)) == 'P');
+    }
+
+int bread()
+    {
+    return (maze[lin+xdir][col+ydir]&(char)BP);
+    }
+
+void drop()
+     {
+     maze[lin][col]=(char) BP;
+     }
+
+void take()     /*takes pellets or bread, scores pellets*/
+     {
+     if ((maze[lin][col]&(~BP))=='P')
+            score++;
+     maze[lin][col] = ' ';
+     incsteps();
+     }
+
+void right()
+     {
+     if (xdir==0 && ydir==1)  /*down*/
+       {xdir=1;ydir=0;}
+     else
+     if (xdir==0 && ydir==-1)  /*up*/
+       {xdir=-1;ydir=0;}
+	else
+     if (xdir==1 && ydir==0)    /*right*/
+        {xdir=0;ydir=-1;}
+     else
+     if (xdir==-1 && ydir==0)   /*left*/
+        {xdir=0;ydir=1;}
+     /*move the image*/
+     drawrobot();
+     }
+
+void left()
+     {
+     if (xdir==0 && ydir==1)  /*down*/
+       {xdir=-1;ydir=0;}
+     else
+     if (xdir==0 && ydir==-1)  /*up*/
+       {xdir=1;ydir=0;}
+     else
+     if (xdir==1 && ydir==0)    /*right*/
+        {xdir=0;ydir=1;}
+	else
+     if (xdir==-1 && ydir==0)   /*left*/
+        {xdir=0;ydir=-1;}
+     /*move the image*/
+     drawrobot();
+     }
+
+void forward()
+     {
+     if ( maze[lin+xdir][col+ydir] != 'O' && lin+xdir<MAZESIZE && col+ydir<MAZESIZE)
+        {
+        maze[lin][col] |= trace;
+        lin+=xdir;
+        col+=ydir;
+        /*move the image*/
+        eraserobot();
+        drawrobot();
+        incsteps();
+        delay(DELAY);
+        }
+	}
+
+void incsteps()
+/*increment step counter and display status*/
+       {
+       char str[40];
+
+       steps++;
+       setcolor(WHITE);
+       sprintf(str,     "Steps: %u",steps);
+       putimage(500,10,blankline,COPY_PUT);
+       outtextxy(500,10,str);
+
+       /*display score*/
+       setcolor(WHITE);
+       sprintf(str,     "Pellets: %2u",score);
+       putimage(500,30,blankline,COPY_PUT);
+       outtextxy(500,30,str);
+
+       if (steps >= maxsteps)
+		STOP;
+       }
+
+void waitmsg()
+/*display WAITING... or not*/
+       {
+
+       setcolor(WHITE);
+       while (!kbhit())
+             {
+             outtextxy(500,70,"Waiting...");
+             delay(200);
+             putimage(500,70,blankline,COPY_PUT);
+             delay(150);
+             }
+       }
+
+/***********************************/
+/*beginning of user program follows*/
+#endif
+#line 1

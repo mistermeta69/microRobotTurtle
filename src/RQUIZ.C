@@ -1,0 +1,21 @@
+#include "c:\lang\c\robot\robot.h"
+
+
+START_PROGRAM
+LOAD("c:/lang/c/robot/MAZE7")
+SPEED(10)
+
+OPEN_HATCH
+WHILE NOT PELLET
+      BEGIN
+      IF BLOCKED
+         L
+      ELSE
+      IF BREAD
+         L
+      ELSE
+          F
+      END
+F
+TAKE
+END_PROGRAM
