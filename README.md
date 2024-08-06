@@ -1,5 +1,5 @@
-Robot Control Language                         Copyright T.Barake   Sept. 1994
-Version 1.1                                    (613) 498-1304  Rev01 Nov. 1994
+Robot Control Language                         Sept. 1994
+Version 1.1                                    Rev01 Nov. 1994
 	
 	
 Introduction 
