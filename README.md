@@ -170,7 +170,7 @@ The robot's x,y coordinates follow the maze, and the robot's direction
 as an x and y increment (-1,0, or +1) follow.
 
 Example:
-
+```
 OOOOOOOOOOOOOOOO
 O              O
 O              O
@@ -192,7 +192,7 @@ OOOOOOOOPOOOOOOO
  1
  0
 
-
+```
 Means position robot at upper left corner and make it point in the 
 positive x direction (to the right).
 
