@@ -1,17 +1,17 @@
-Robot Control Language                         Sept. 1994
-Version 1.1                                    Rev01 Nov. 1994
+# Robot Control Language                         Sept. 1994
+# Version 1.1                                    Rev01 Nov. 1994
 	
 	
-Introduction 
+## Introduction 
 	What it is:
 	The robot control language is a small programming environment that 
 	can be used to teach procedural programming. The programs control 
 	the movement of a virtual robot through a user defined maze. 
 	Robot and maze are displayed in two dimensions on any VGA screen.
 
-What you need to run robot programs:
+### What you need to run robot programs:
 	The programs must be saved in a text file with the file 
-	extension ".C", for example "assign1.c" is a valid file name.
+	extension ".c", for example "assign1.c" is a valid file name.
 
 	You need a Turbo C or C++ DOS version compiler to compile and run 
 	the programs you write. Source code can be entered using any text 
@@ -27,17 +27,9 @@ What you need to run robot programs:
 	which contains the code for the robot interpreter. Include 
 	this file in all your programs, as described below.
 
+## Syntax & Command Summary
 
-Copyright
-	This code and documentation are copyright and may be used only 
-	if left unmodified. It should not be distributed, unless written 
-	permission is obtained from the author.
-
-
-
-Syntax & Command Summary
-
-General Syntactic Rules:
+### General Syntactic Rules:
 
 	Words show below in capital letters are elements of the language 
 	and must appear exactly as shown. All other words are either 
